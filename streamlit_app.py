@@ -37,12 +37,9 @@ def cargar_datos(url, formato):
         content_type = response.headers.get('Content-Type', '').lower()
         data = response.content.decode('utf-8', errors='replace')
         
-        st.markdown("**<span style='color:white;'>Content-Type:</span>**", unsafe_allow_html=True)
-        st.write("El Content-Type es un encabezado HTTP que indica el tipo de contenido que devuelve la URL.")
         st.markdown(f"**<span style='color:white;'>URL de descarga:</span>** {url}", unsafe_allow_html=True)
         
-        st.write("Contenido recibido (primeros 500 caracteres):")
-        st.code(data[:500])
+
         
         if 'text/html' in content_type or data.strip().startswith('<!DOCTYPE html>'):
             st.write("La URL devuelve contenido HTML, no un archivo de datos.")
@@ -176,7 +173,6 @@ def main():
         </div>
     """, unsafe_allow_html=True)
 
-    st.warning("La verificación SSL está deshabilitada. Esto puede exponer la aplicación a riesgos de seguridad.")
 
     if 'page' not in st.session_state:
         st.session_state.page = 0
@@ -236,7 +232,7 @@ def main():
                             .data-section {
                                 background-color: #EAEAEA;
                                 color: #00008B;
-                                padding: 20px;
+                                padding: 2px;
                                 font-family: 'IBM Plex Sans', sans-serif;
                             }
                             </style>
