@@ -35,41 +35,51 @@ def cargar_datos(url, formato):
         response.raise_for_status()
         
         content_type = response.headers.get('Content-Type', '').lower()
+        data = response.content.decode('utf-8', errors='replace')
+        
+        st.markdown("**<span style='color:white;'>Content-Type:</span>**", unsafe_allow_html=True)
+        st.write("El Content-Type es un encabezado HTTP que indica el tipo de contenido que devuelve la URL.")
         st.markdown(f"**<span style='color:white;'>URL de descarga:</span>** {url}", unsafe_allow_html=True)
         
-        if 'text/html' in content_type:
+        st.write("Contenido recibido (primeros 500 caracteres):")
+        st.code(data[:500])
+        
+        if 'text/html' in content_type or data.strip().startswith('<!DOCTYPE html>'):
             st.write("La URL devuelve contenido HTML, no un archivo de datos.")
-            st.write(response.text)
             return None
         
-        if 'csv' in formato or 'csv' in content_type:
-            data = response.content.decode('utf-8', errors='replace')
-            df = pd.read_csv(io.StringIO(data), sep=None, engine='python')
-            return df
-        elif 'json' in formato or 'json' in content_type:
-            data = response.json()
-            if isinstance(data, dict):
-                df = pd.json_normalize(data)
-            elif isinstance(data, list):
-                df = pd.DataFrame(data)
-            else:
-                st.write("Formato JSON no reconocido.")
+        if 'xml' in formato or 'xml' in content_type:
+            if not data.strip().startswith('<'):
+                st.write("El contenido recibido no es XML válido.")
                 return None
-            return df
-        elif 'xml' in formato or 'xml' in content_type:
             try:
-                data = response.content.decode('utf-8', errors='replace')
                 df = pd.read_xml(io.StringIO(data))
                 return df
             except Exception as e:
                 st.write(f"Error al cargar XML: {e}")
+                return None
+        elif 'csv' in formato or 'csv' in content_type:
+            df = pd.read_csv(io.StringIO(data), sep=None, engine='python')
+            return df
+        elif 'json' in formato or 'json' in content_type:
+            try:
+                json_data = json.loads(data)
+                if isinstance(json_data, dict):
+                    df = pd.json_normalize(json_data)
+                elif isinstance(json_data, list):
+                    df = pd.DataFrame(json_data)
+                else:
+                    st.write("Formato JSON no reconocido.")
+                    return None
+                return df
+            except json.JSONDecodeError as e:
+                st.write(f"Error al cargar JSON: {e}")
                 return None
         elif 'excel' in formato or 'spreadsheetml' in formato:
             df = pd.read_excel(io.BytesIO(response.content))
             return df
         else:
             st.write(f"Formato {formato} no soportado o contenido no válido.")
-            data = response.content.decode('utf-8', errors='replace')
             return None
     except Exception as e:
         st.write(f"Error al cargar los datos: {e}")
@@ -96,10 +106,9 @@ def main():
     # Inyectar CSS personalizado
     st.markdown("""
         <style>
-        /* Cambiar el color del texto y fondo del título del expander */
-        .streamlit-expanderHeader {
-            color: white;
-        }
+        /* Importar la fuente IBM Plex Sans */
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans&display=swap');
+
         /* Cambiar el color de fondo de toda la aplicación */
         .stApp {
             background-color: #4C2F26;
@@ -108,20 +117,24 @@ def main():
         /* Cambiar el color del texto para garantizar legibilidad */
         html, body, [class*="css"]  {
             color: white;
+            font-family: 'IBM Plex Sans', sans-serif;
         }
         /* Estilos para inputs y selects */
         input, select, textarea {
             background-color: #FFFFFF !important;
             color: #4C2F26 !important;
+            font-family: 'IBM Plex Sans', sans-serif;
         }
         /* Estilos para las etiquetas */
         label {
             color: white;
+            font-family: 'IBM Plex Sans', sans-serif;
         }
         /* Estilos para los botones */
         .stButton>button {
             background-color: #FFD100;
             color: #4C2F26;
+            font-family: 'IBM Plex Sans', sans-serif;
         }
         /* Estilos para el pie de página */
         footer {
@@ -132,6 +145,7 @@ def main():
             color: white !important;
             text-align: center !important;
             padding: 10px;
+            font-family: 'IBM Plex Sans', sans-serif;
         }
         footer a {
             color: white !important;
@@ -140,14 +154,17 @@ def main():
         /* Asegurar que el título se muestre en blanco */
         .hero h1 {
             color: white !important;
-        }
-        /* Cambiar el color del texto del título del expander */
-        .streamlit-expanderHeader {
-            color: white !important;
+            font-family: 'IBM Plex Sans', sans-serif;
         }
         /* Cambiar el color del texto y fondo del título del expander */
         .streamlit-expanderHeader {
+            background-color: green !important;
             color: white !important;
+            font-family: 'IBM Plex Sans', sans-serif;
+        }
+        /* Cambiar la fuente del contenido del expander */
+        .streamlit-expanderContent {
+            font-family: 'IBM Plex Sans', sans-serif;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -159,12 +176,19 @@ def main():
         </div>
     """, unsafe_allow_html=True)
 
-    #st.warning("La verificación SSL está deshabilitada. Esto puede exponer la aplicación a riesgos de seguridad.")
+    st.warning("La verificación SSL está deshabilitada. Esto puede exponer la aplicación a riesgos de seguridad.")
 
     if 'page' not in st.session_state:
         st.session_state.page = 0
 
     datasets, total_items = obtener_datasets_pagina(st.session_state.page)
+
+    # Definir funciones de callback para los botones
+    def previous_page():
+        st.session_state.page -= 1
+
+    def next_page():
+        st.session_state.page += 1
 
     if datasets:
         opciones = []
@@ -175,7 +199,7 @@ def main():
                 url_descarga = distribucion.get('accessURL', '')
                 formato = distribucion.get('format', {}).get('value', '').lower()
                 opciones.append({'titulo': titulo, 'url': url_descarga, 'formato': formato})
-                break
+                break  # Si solo deseas la primera distribución
         if opciones:
             st.markdown("""
                 <style>
@@ -183,6 +207,7 @@ def main():
                     background-color: #4C2F26;
                     color: white;
                     padding: 10px;
+                    font-family: 'IBM Plex Sans', sans-serif;
                 }
                 </style>
                 <h2 class='section-header'>Selecciona un dataset:</h2>
@@ -201,27 +226,22 @@ def main():
                     if datos is not None and not datos.empty:
                         if 'selectedLanguages' in datos.columns:
                             datos['selectedLanguages'] = datos['selectedLanguages'].astype(str)
-                            st.markdown(
-                    '''
-                    <style>
-                    .streamlit-expanderHeader {
-                        background-color: white;
-                        color: black; # Adjust this for expander header color
-                    }
-                    .streamlit-expanderContent {
-                        background-color: white;
-                        color: black; # Expander content color
-                    }
-                    </style>
-                    ''',
-                    unsafe_allow_html=True
-                             )
 
                         # Mostrar columnas disponibles en un expander
                         with st.expander("Columnas del DataFrame"):
                             st.write(datos.columns.tolist())
 
-    
+                        st.markdown("""
+                            <style>
+                            .data-section {
+                                background-color: #EAEAEA;
+                                color: #00008B;
+                                padding: 20px;
+                                font-family: 'IBM Plex Sans', sans-serif;
+                            }
+                            </style>
+                            <div class="data-section">
+                        """, unsafe_allow_html=True)
 
                         st.markdown(f"<p style='color:white;'>Mostrando datos del dataset: {opcion_seleccionada}</p>", unsafe_allow_html=True)
                         st.dataframe(datos.head())
@@ -233,8 +253,6 @@ def main():
                             datos.reset_index(inplace=True)
 
                         datos.columns = ['_'.join(str(s) for s in col) if isinstance(col, tuple) else str(col) for col in datos.columns]
-
-                        # Eliminamos la funcionalidad de generar gráficos
 
                     else:
                         st.write("No se pudo cargar el dataset seleccionado o está vacío.")
@@ -258,6 +276,7 @@ def main():
             cursor: pointer;
             font-size: 16px;
             margin: 5px;
+            font-family: 'IBM Plex Sans', sans-serif;
         }
         .pagination-button:hover {
             background-color: #e0b800;
@@ -265,20 +284,16 @@ def main():
         </style>
     """, unsafe_allow_html=True)
 
-    # Botones de paginación
+    # Botones de paginación con callbacks
     col1, col2, col3 = st.columns([1,2,1])
     with col1:
         if st.session_state.page > 0:
-            if st.button('Anterior'):
-                st.session_state.page -= 1
-                st.experimental_rerun()
+            st.button('Anterior', on_click=previous_page, key='previous_page_button')
     with col3:
         if datasets:
-            if st.button('Siguiente'):
-                st.session_state.page += 1
-                st.experimental_rerun()
+            st.button('Siguiente', on_click=next_page, key='next_page_button')
     # Mostrar número de página en blanco
-    st.markdown(f"<p style='color:white;'>Página {st.session_state.page + 1}</p>", unsafe_allow_html=True)
+    st.markdown(f"<p style='color:white; font-family: \"IBM Plex Sans\", sans-serif;'>Página {st.session_state.page + 1}</p>", unsafe_allow_html=True)
 
     # Añadir el pie de página al final de la página
     st.markdown("""
